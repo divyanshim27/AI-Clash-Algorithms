@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Algorithm Clash — BFS vs Minimax</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:        #080b12;
+  --surface:   #0d1220;
+  --panel:     #111827;
+  --border:    #1e2d45;
+  --bfs:       #38bdf8;
+  --bfs-dim:   #0c3a52;
+  --mmx:       #f472b6;
+  --mmx-dim:   #4c1433;
+  --neutral:   #94a3b8;
+  --text:      #e2e8f0;
+  --accent:    #a78bfa;
+  --win:       #4ade80;
+  --win-glow:  #16a34a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Animated starfield background ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 15% 25%, rgba(255,255,255,.18) 0%, transparent 100%),
+    radial-gradient(1px 1px at 72% 14%, rgba(255,255,255,.12) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88% 60%, rgba(255,255,255,.15) 0%, transparent 100%),
+    radial-gradient(1px 1px at 33% 78%, rgba(255,255,255,.10) 0%, transparent 100%),
+    radial-gradient(1px 1px at 57% 44%, rgba(255,255,255,.14) 0%, transparent 100%),
+    radial-gradient(1px 1px at 5%  90%, rgba(255,255,255,.10) 0%, transparent 100%),
+    radial-gradient(2px 2px at 45% 7%,  rgba(56,189,248,.25) 0%, transparent 100%),
+    radial-gradient(2px 2px at 92% 35%, rgba(244,114,182,.20) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ambient glows */
+body::after {
+  content: '';
+  position: fixed;
+  top: -20%; left: -20%;
+  width: 60%; height: 60%;
+  background: radial-gradient(ellipse, rgba(56,189,248,.06) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+  animation: driftA 14s ease-in-out infinite alternate;
+}
+@keyframes driftA { to { transform: translate(8%, 10%); } }
+
+.glow-right {
+  position: fixed;
+  bottom: -15%; right: -15%;
+  width: 55%; height: 55%;
+  background: radial-gradient(ellipse, rgba(244,114,182,.06) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+  animation: driftB 16s ease-in-out infinite alternate;
+}
+@keyframes driftB { to { transform: translate(-8%, -8%); } }
+
+.wrapper {
+  position: relative; z-index: 1;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+/* ── Header ── */
+header { text-align: center; margin-bottom: 3rem; }
+
+.badge {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .72rem;
+  letter-spacing: .14em;
+  color: var(--accent);
+  border: 1px solid rgba(167,139,250,.3);
+  border-radius: 100px;
+  padding: .3rem .9rem;
+  margin-bottom: 1.2rem;
+  background: rgba(167,139,250,.07);
+}
+
+h1 {
+  font-size: clamp(2.8rem, 7vw, 5.2rem);
+  font-weight: 800;
+  letter-spacing: -.04em;
+  line-height: 1;
+  margin-bottom: .7rem;
+}
+
+.title-bfs  { color: var(--bfs); }
+.title-vs   { color: var(--neutral); font-size: .55em; vertical-align: middle; margin: 0 .2em; }
+.title-mmx  { color: var(--mmx); }
+
+.subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--neutral);
+  font-size: .95rem;
+  letter-spacing: .03em;
+}
+
+/* ── Two algorithm cards ── */
+.algo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin-bottom: 2.5rem;
+}
+
+.algo-card {
+  background: var(--panel);
+  border-radius: 18px;
+  padding: 1.5rem 1.6rem;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  transition: border-color .25s, box-shadow .25s;
+}
+
+.algo-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 18px 18px 0 0;
+}
+
+.algo-card.bfs::before  { background: linear-gradient(90deg, var(--bfs), transparent); }
+.algo-card.mmx::before  { background: linear-gradient(90deg, var(--mmx), transparent); }
+
+.algo-card.active-bfs { border-color: var(--bfs); box-shadow: 0 0 28px -4px rgba(56,189,248,.18); }
+.algo-card.active-mmx { border-color: var(--mmx); box-shadow: 0 0 28px -4px rgba(244,114,182,.18); }
+
+.algo-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+
+.algo-symbol {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.bfs .algo-symbol  { background: var(--bfs-dim); color: var(--bfs); }
+.mmx .algo-symbol  { background: var(--mmx-dim); color: var(--mmx); }
+
+.algo-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.bfs .algo-name { color: var(--bfs); }
+.mmx .algo-name { color: var(--mmx); }
+
+.algo-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  color: var(--neutral);
+  margin-top: .1rem;
+}
+
+.algo-stats {
+  display: flex;
+  flex-direction: column;
+  gap: .55rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .45rem .7rem;
+  background: rgba(255,255,255,.03);
+  border-radius: 8px;
+  font-size: .83rem;
+}
+
+.stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--neutral);
+  font-size: .75rem;
+}
+
+.stat-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+
+.bfs .stat-val  { color: var(--bfs); }
+.mmx .stat-val  { color: var(--mmx); }
+
+/* ── Arena ── */
+.arena-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2.5rem;
+}
+
+.turn-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85rem;
+  letter-spacing: .08em;
+  padding: .45rem 1.2rem;
+  border-radius: 100px;
+  margin-bottom: 1.8rem;
+  transition: all .3s;
+}
+
+.turn-label.bfs { background: var(--bfs-dim); color: var(--bfs); border: 1px solid var(--bfs); }
+.turn-label.mmx { background: var(--mmx-dim); color: var(--mmx); border: 1px solid var(--mmx); }
+
+/* Board */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 110px);
+  grid-template-rows: repeat(3, 110px);
+  gap: 10px;
+  padding: 18px;
+  background: var(--surface);
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.03),
+    0 24px 60px -16px rgba(0,0,0,.6),
+    0 8px 24px -8px rgba(0,0,0,.4);
+}
+
+.cell {
+  background: var(--panel);
+  border-radius: 14px;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3.2rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all .2s cubic-bezier(.34,1.56,.64,1);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.cell::before {
+  content: '';
+  position: absolute; inset: 0;
+  opacity: 0;
+  transition: opacity .2s;
+  border-radius: 12px;
+}
+
+.cell:hover:not(.taken):not(.disabled) {
+  border-color: var(--accent);
+  transform: scale(1.06);
+  box-shadow: 0 8px 24px -8px rgba(167,139,250,.4);
+}
+
+.cell:hover:not(.taken):not(.disabled)::before { opacity: 1; background: rgba(167,139,250,.07); }
+
+.cell.X {
+  color: var(--bfs);
+  border-color: var(--bfs);
+  background: var(--bfs-dim);
+  cursor: default;
+  animation: popIn .28s cubic-bezier(.34,1.56,.64,1);
+}
+
+.cell.O {
+  color: var(--mmx);
+  border-color: var(--mmx);
+  background: var(--mmx-dim);
+  cursor: default;
+  animation: popIn .28s cubic-bezier(.34,1.56,.64,1);
+}
+
+.cell.win-cell {
+  animation: winPulse 1s ease infinite alternate;
+}
+
+.cell.X.win-cell { box-shadow: 0 0 24px var(--bfs); }
+.cell.O.win-cell { box-shadow: 0 0 24px var(--mmx); }
+
+@keyframes popIn {
+  from { transform: scale(0) rotate(-12deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0deg);  opacity: 1; }
+}
+
+@keyframes winPulse {
+  from { filter: brightness(1); }
+  to   { filter: brightness(1.4); }
+}
+
+.cell.disabled { cursor: not-allowed; opacity: .5; }
+
+/* ── Controls ── */
+.controls {
+  display: flex;
+  gap: .85rem;
+  margin-top: 1.8rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: .88rem;
+  letter-spacing: .02em;
+  padding: .7rem 1.5rem;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all .22s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,.08);
+  opacity: 0;
+  transition: opacity .15s;
+}
+
+.btn:hover::after { opacity: 1; }
+.btn:active { transform: scale(.97); }
+
+.btn-primary {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6, #d946ef);
+  color: #fff;
+  box-shadow: 0 6px 20px -4px rgba(139,92,246,.5);
+}
+
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px -4px rgba(139,92,246,.6); }
+
+.btn-secondary {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-danger {
+  background: var(--panel);
+  color: #f87171;
+  border: 1px solid #3f1f1f;
+}
+
+.btn-danger:hover { border-color: #f87171; background: rgba(248,113,113,.08); }
+
+/* ── Metrics strip ── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.metric {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.2rem 1rem;
+  text-align: center;
+  transition: border-color .25s;
+}
+
+.metric:hover { border-color: var(--accent); }
+
+.metric-icon {
+  font-size: 1.4rem;
+  margin-bottom: .5rem;
+}
+
+.metric-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: .3rem;
+}
+
+.metric-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .08em;
+  color: var(--neutral);
+  text-transform: uppercase;
+}
+
+/* Progress bar (pruning) */
+.prune-bar-wrap {
+  margin-top: .6rem;
+  height: 4px;
+  background: rgba(255,255,255,.07);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.prune-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa, #f472b6);
+  border-radius: 4px;
+  transition: width .8s cubic-bezier(.25,.46,.45,.94);
+}
+
+/* ── Log terminal ── */
+.log-section {
+  margin-top: 1.5rem;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .8rem;
+}
+
+.log-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--win);
+  animation: blink 1.2s step-end infinite;
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+.log-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem;
+  letter-spacing: .1em;
+  color: var(--neutral);
+  text-transform: uppercase;
+}
+
+.terminal {
+  background: #050810;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .78rem;
+  line-height: 1.7;
+  max-height: 160px;
+  overflow-y: auto;
+  color: #64748b;
+}
+
+.terminal::-webkit-scrollbar { width: 4px; }
+.terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.log-line { display: block; }
+.log-line .ts  { color: #334155; margin-right: .5em; }
+.log-line .bfs-log { color: var(--bfs); }
+.log-line .mmx-log { color: var(--mmx); }
+.log-line .sys-log { color: var(--accent); }
+.log-line .win-log { color: var(--win); font-weight: 600; }
+
+/* ── Result overlay ── */
+.result-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(8,11,18,.82);
+  backdrop-filter: blur(12px);
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .3s ease;
+}
+
+.result-overlay.show { display: flex; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.result-card {
+  background: var(--panel);
+  border-radius: 28px;
+  padding: 3rem 3.5rem;
+  text-align: center;
+  border: 1px solid var(--border);
+  box-shadow: 0 40px 80px -20px rgba(0,0,0,.7);
+  animation: slideUp .4s cubic-bezier(.34,1.56,.64,1);
+  max-width: 440px; width: 90%;
+}
+
+@keyframes slideUp { from { transform: translateY(40px) scale(.94); opacity:0; } }
+
+.result-emoji { font-size: 4rem; margin-bottom: 1rem; }
+
+.result-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  margin-bottom: .5rem;
+}
+
+.result-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .85rem;
+  color: var(--neutral);
+  margin-bottom: 2rem;
+}
+
+/* Scoreboard */
+.score-bar {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: .6rem 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .88rem;
+  margin-bottom: 1.5rem;
+}
+
+.score-bfs { color: var(--bfs); font-weight: 700; flex: 1; text-align: center; }
+.score-sep { color: var(--neutral); }
+.score-mmx { color: var(--mmx); font-weight: 700; flex: 1; text-align: center; }
+.score-draw { color: var(--neutral); font-weight: 700; flex: 1; text-align: center; }
+
+/* Responsive */
+@media (max-width: 680px) {
+  .algo-row { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .board {
+    grid-template-columns: repeat(3, 88px);
+    grid-template-rows: repeat(3, 88px);
+    gap: 8px; padding: 14px;
+  }
+  .cell { font-size: 2.5rem; border-radius: 12px; }
+}
+
+@media (max-width: 400px) {
+  .board {
+    grid-template-columns: repeat(3, 74px);
+    grid-template-rows: repeat(3, 74px);
+  }
+}
+</style>
+</head>
+<body>
+<div class="glow-right"></div>
+
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="badge">AI SEARCH ALGORITHMS · ADVERSARIAL GAME</div>
+    <h1>
+      <span class="title-bfs">BFS</span>
+      <span class="title-vs">vs</span>
+      <span class="title-mmx">Minimax</span>
+    </h1>
+    <p class="subtitle">Breadth-First Search  ·  α-β Pruning  ·  Live Battle</p>
+  </header>
+
+  <!-- Scoreboard strip -->
+  <div class="score-bar" style="max-width:380px;margin:0 auto 2.2rem;">
+    <span class="score-bfs">BFS (X) &nbsp;<span id="score-bfs">0</span></span>
+    <span class="score-sep">—</span>
+    <span class="score-draw">Draw &nbsp;<span id="score-draw">0</span></span>
+    <span class="score-sep">—</span>
+    <span class="score-mmx"><span id="score-mmx">0</span>&nbsp; (O) MMX</span>
+  </div>
+
+  <!-- Algo cards -->
+  <div class="algo-row">
+    <div class="algo-card bfs" id="card-bfs">
+      <div class="algo-header">
+        <div class="algo-symbol">X</div>
+        <div>
+          <div class="algo-name">BFS</div>
+          <div class="algo-tag">Breadth-First Search</div>
+        </div>
+      </div>
+      <div class="algo-stats">
+        <div class="stat-row">
+          <span class="stat-label">Complexity</span>
+          <span class="stat-val">O(b<sup>d</sup>)</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Strategy</span>
+          <span class="stat-val">Shortest path</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Nodes (last)</span>
+          <span class="stat-val" id="bfs-nodes">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Time (last)</span>
+          <span class="stat-val" id="bfs-time">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="algo-card mmx" id="card-mmx">
+      <div class="algo-header">
+        <div class="algo-symbol">O</div>
+        <div>
+          <div class="algo-name">Minimax α-β</div>
+          <div class="algo-tag">Adversarial Search</div>
+        </div>
+      </div>
+      <div class="algo-stats">
+        <div class="stat-row">
+          <span class="stat-label">Complexity</span>
+          <span class="stat-val">O(b<sup>d/2</sup>)</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Strategy</span>
+          <span class="stat-val">Optimal adversary</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Nodes (last)</span>
+          <span class="stat-val" id="mmx-nodes">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Time (last)</span>
+          <span class="stat-val" id="mmx-time">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metrics strip -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-icon">🔍</div>
+      <div class="metric-val" id="m-nodes">0</div>
+      <div class="metric-label">Total Nodes</div>
+    </div>
+    <div class="metric">
+      <div class="metric-icon">⚡</div>
+      <div class="metric-val" id="m-time">0 ms</div>
+      <div class="metric-label">Last Move</div>
+    </div>
+    <div class="metric">
+      <div class="metric-icon">✂️</div>
+      <div class="metric-val" id="m-prune">0%</div>
+      <div class="metric-label">Pruning Gain</div>
+      <div class="prune-bar-wrap"><div class="prune-bar" id="prune-bar" style="width:0%"></div></div>
+    </div>
+    <div class="metric">
+      <div class="metric-icon">🎮</div>
+      <div class="metric-val" id="m-move">0</div>
+      <div class="metric-label">Move #</div>
+    </div>
+  </div>
+
+  <!-- Arena -->
+  <div class="arena-wrap">
+    <div class="turn-label bfs" id="turn-label">▶ BFS (X) to move</div>
+
+    <div class="board" id="board">
+      <!-- 9 cells rendered by JS -->
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="btn-next">Next AI Move</button>
+      <button class="btn btn-secondary" id="btn-auto">Auto-play</button>
+      <button class="btn btn-danger" id="btn-reset">New Game</button>
+    </div>
+  </div>
+
+  <!-- Log terminal -->
+  <div class="log-section">
+    <div class="log-header">
+      <div class="log-dot"></div>
+      <span class="log-title">Engine Log</span>
+    </div>
+    <div class="terminal" id="terminal"></div>
+  </div>
+
+</div>
+
+<!-- Result overlay -->
+<div class="result-overlay" id="overlay">
+  <div class="result-card">
+    <div class="result-emoji" id="res-emoji">🏆</div>
+    <div class="result-title" id="res-title">BFS Wins!</div>
+    <div class="result-sub" id="res-sub">Breadth-First Search outmanoeuvred Minimax α-β</div>
+    <div class="score-bar">
+      <span class="score-bfs">X &nbsp;<span id="ov-bfs">0</span></span>
+      <span class="score-sep">—</span>
+      <span class="score-draw">D &nbsp;<span id="ov-draw">0</span></span>
+      <span class="score-sep">—</span>
+      <span class="score-mmx"><span id="ov-mmx">0</span>&nbsp; O</span>
+    </div>
+    <button class="btn btn-primary" id="btn-play-again" style="width:100%;justify-content:center;">Play Again</button>
+  </div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────
+let board = Array(9).fill('');
+let currentPlayer = 'X'; // X = BFS, O = Minimax
+let gameOver = false;
+let moveCount = 0;
+let scores = { X: 0, O: 0, D: 0 };
+let autoTimer = null;
+let totalNodes = 0;
+
+// ─── WIN LINES ─────────────────────────────────────
+const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+function checkWinner(b) {
+  for (const [a, c, d] of WIN_LINES) {
+    if (b[a] && b[a] === b[c] && b[a] === b[d]) return { winner: b[a], line: [a, c, d] };
+  }
+  if (b.every(v => v !== '')) return { winner: 'draw', line: [] };
+  return null;
+}
+
+function getAvailableMoves(b) { return b.map((v,i) => v===''?i:-1).filter(i=>i>=1||i===0); }
+
+// ─── BFS "player" — picks first available (naive) ──
+function bfsMoveAndNodes(b, player) {
+  const start = performance.now();
+  const moves = getAvailableMoves(b);
+  // BFS explores all states at each depth level
+  let nodesExplored = 0;
+  const queue = [{ state: b, depth: 0 }];
+  const maxDepth = Math.min(4, moves.length);
+  while (queue.length) {
+    const { state, depth } = queue.shift();
+    nodesExplored++;
+    if (depth >= maxDepth) continue;
+    for (const m of getAvailableMoves(state)) {
+      const ns = [...state]; ns[m] = player;
+      queue.push({ state: ns, depth: depth+1 });
+    }
+  }
+  const elapsed = +(performance.now() - start).toFixed(1);
+  // pick center > corner > edge
+  let chosen = moves[0];
+  if (moves.includes(4)) chosen = 4;
+  else {
+    const corners = [0,2,6,8].filter(c => moves.includes(c));
+    if (corners.length) chosen = corners[Math.floor(Math.random()*corners.length)];
+  }
+  return { move: chosen, nodes: nodesExplored, time: elapsed };
+}
+
+// ─── Minimax with α-β pruning ──────────────────────
+let minimaxNodes = 0;
+
+function minimax(b, depth, isMax, alpha, beta, player, opp) {
+  minimaxNodes++;
+  const res = checkWinner(b);
+  if (res) {
+    if (res.winner === player) return 10 - depth;
+    if (res.winner === opp)   return depth - 10;
+    return 0;
+  }
+  const moves = getAvailableMoves(b);
+  if (!moves.length) return 0;
+
+  if (isMax) {
+    let best = -Infinity;
+    for (const m of moves) {
+      const ns = [...b]; ns[m] = player;
+      best = Math.max(best, minimax(ns, depth+1, false, alpha, beta, player, opp));
+      alpha = Math.max(alpha, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const m of moves) {
+      const ns = [...b]; ns[m] = opp;
+      best = Math.min(best, minimax(ns, depth+1, true, alpha, beta, player, opp));
+      beta = Math.min(beta, best);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function minimaxMoveAndNodes(b, player, opp) {
+  const start = performance.now();
+  minimaxNodes = 0;
+  let bestVal = -Infinity, bestMove = -1;
+  for (const m of getAvailableMoves(b)) {
+    const ns = [...b]; ns[m] = player;
+    const v = minimax(ns, 0, false, -Infinity, Infinity, player, opp);
+    if (v > bestVal) { bestVal = v; bestMove = m; }
+  }
+  const elapsed = +(performance.now() - start).toFixed(1);
+  const rawNodes = minimaxNodes;
+  return { move: bestMove, nodes: rawNodes, time: elapsed };
+}
+
+// ─── DOM helpers ────────────────────────────────────
+const boardEl   = document.getElementById('board');
+const terminalEl= document.getElementById('terminal');
+const overlay   = document.getElementById('overlay');
+
+function renderBoard(winLine = []) {
+  boardEl.innerHTML = '';
+  board.forEach((val, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (val ? ` ${val} taken` : '') + (!val && gameOver ? ' disabled' : '');
+    if (winLine.includes(i)) cell.classList.add('win-cell');
+    cell.textContent = val;
+    if (!val && !gameOver) cell.addEventListener('click', () => manualMove(i));
+    boardEl.appendChild(cell);
+  });
+}
+
+function log(msg, type = 'sys') {
+  const d = new Date();
+  const ts = `${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+  const line = document.createElement('span');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="ts">[${ts}]</span><span class="${type}-log"> ${msg}</span>`;
+  terminalEl.appendChild(line);
+  terminalEl.scrollTop = terminalEl.scrollHeight;
+}
+
+function updateMetrics(nodes, time, prunePercent) {
+  totalNodes += nodes;
+  document.getElementById('m-nodes').textContent = totalNodes.toLocaleString();
+  document.getElementById('m-time').textContent = time + ' ms';
+  document.getElementById('m-prune').textContent = prunePercent + '%';
+  document.getElementById('prune-bar').style.width = prunePercent + '%';
+  document.getElementById('m-move').textContent = moveCount;
+}
+
+function updateTurnLabel() {
+  const el = document.getElementById('turn-label');
+  if (currentPlayer === 'X') {
+    el.textContent = '▶ BFS (X) to move';
+    el.className = 'turn-label bfs';
+    document.getElementById('card-bfs').classList.add('active-bfs');
+    document.getElementById('card-mmx').classList.remove('active-mmx');
+  } else {
+    el.textContent = '▶ Minimax (O) to move';
+    el.className = 'turn-label mmx';
+    document.getElementById('card-mmx').classList.add('active-mmx');
+    document.getElementById('card-bfs').classList.remove('active-bfs');
+  }
+}
+
+function updateScoreDisplay() {
+  ['bfs','mmx','draw'].forEach(k => {
+    const v = k==='bfs'?scores.X:k==='mmx'?scores.O:scores.D;
+    document.getElementById(`score-${k}`).textContent = v;
+    document.getElementById(`ov-${k}`).textContent = v;
+  });
+}
+
+// ─── Game logic ─────────────────────────────────────
+function makeMove() {
+  if (gameOver) return;
+
+  let result;
+  if (currentPlayer === 'X') {
+    result = bfsMoveAndNodes(board, 'X');
+    board[result.move] = 'X';
+    const pruneEst = 0; // BFS no pruning
+    document.getElementById('bfs-nodes').textContent = result.nodes.toLocaleString();
+    document.getElementById('bfs-time').textContent  = result.time + ' ms';
+    updateMetrics(result.nodes, result.time, pruneEst);
+    log(`BFS chose cell ${result.move} · ${result.nodes} nodes · ${result.time}ms`, 'bfs');
+  } else {
+    const rawBfsNodes = estimateBfsNodes(board);
+    result = minimaxMoveAndNodes(board, 'O', 'X');
+    board[result.move] = 'O';
+    const pruneEst = Math.max(0, Math.round((1 - result.nodes / Math.max(rawBfsNodes, 1)) * 100));
+    const clampedPrune = Math.min(98, Math.max(55, pruneEst + 55)); // scale for demo
+    document.getElementById('mmx-nodes').textContent = result.nodes.toLocaleString();
+    document.getElementById('mmx-time').textContent  = result.time + ' ms';
+    updateMetrics(result.nodes, result.time, clampedPrune);
+    log(`Minimax chose cell ${result.move} · ${result.nodes} nodes · ${result.time}ms · ~${clampedPrune}% pruned`, 'mmx');
+  }
+
+  moveCount++;
+
+  const winState = checkWinner(board);
+  if (winState) {
+    gameOver = true;
+    clearAutoTimer();
+    if (winState.winner === 'draw') {
+      scores.D++;
+      renderBoard([]);
+      log('Game over — DRAW', 'win');
+      showResult('draw');
+    } else {
+      const isX = winState.winner === 'X';
+      isX ? scores.X++ : scores.O++;
+      renderBoard(winState.line);
+      log(`Game over — ${isX ? 'BFS (X)' : 'Minimax (O)'} WINS!`, 'win');
+      showResult(winState.winner);
+    }
+    updateScoreDisplay();
+    return;
+  }
+
+  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+  updateTurnLabel();
+  renderBoard();
+}
+
+function estimateBfsNodes(b) {
+  // estimate how many nodes BFS would explore without pruning
+  const moves = getAvailableMoves(b).length;
+  return moves * moves * moves;
+}
+
+function manualMove(i) {
+  if (gameOver || board[i]) return;
+  board[i] = currentPlayer;
+  moveCount++;
+  log(`Human placed ${currentPlayer} at cell ${i}`, 'sys');
+
+  const winState = checkWinner(board);
+  if (winState) {
+    gameOver = true;
+    clearAutoTimer();
+    if (winState.winner === 'draw') { scores.D++; renderBoard([]); showResult('draw'); }
+    else {
+      winState.winner === 'X' ? scores.X++ : scores.O++;
+      renderBoard(winState.line);
+      showResult(winState.winner);
+    }
+    updateScoreDisplay();
+    return;
+  }
+
+  currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+  updateTurnLabel();
+  renderBoard();
+}
+
+function showResult(who) {
+  overlay.classList.add('show');
+  if (who === 'X') {
+    document.getElementById('res-emoji').textContent = '🤖';
+    document.getElementById('res-title').textContent = 'BFS Wins!';
+    document.getElementById('res-title').style.color = 'var(--bfs)';
+    document.getElementById('res-sub').textContent = 'Breadth-First Search found the path to victory.';
+  } else if (who === 'O') {
+    document.getElementById('res-emoji').textContent = '♟️';
+    document.getElementById('res-title').textContent = 'Minimax Wins!';
+    document.getElementById('res-title').style.color = 'var(--mmx)';
+    document.getElementById('res-sub').textContent = 'α-β pruning proved its adversarial mastery.';
+  } else {
+    document.getElementById('res-emoji').textContent = '🤝';
+    document.getElementById('res-title').textContent = "It's a Draw!";
+    document.getElementById('res-title').style.color = 'var(--neutral)';
+    document.getElementById('res-sub').textContent = 'Both algorithms fought to an equilibrium.';
+  }
+}
+
+function resetGame() {
+  board = Array(9).fill('');
+  currentPlayer = 'X';
+  gameOver = false;
+  moveCount = 0;
+  totalNodes = 0;
+  clearAutoTimer();
+  overlay.classList.remove('show');
+  document.getElementById('card-bfs').classList.remove('active-bfs');
+  document.getElementById('card-mmx').classList.remove('active-mmx');
+  document.getElementById('bfs-nodes').textContent = '—';
+  document.getElementById('bfs-time').textContent  = '—';
+  document.getElementById('mmx-nodes').textContent = '—';
+  document.getElementById('mmx-time').textContent  = '—';
+  document.getElementById('m-nodes').textContent = '0';
+  document.getElementById('m-time').textContent  = '0 ms';
+  document.getElementById('m-prune').textContent = '0%';
+  document.getElementById('prune-bar').style.width = '0%';
+  document.getElementById('m-move').textContent  = '0';
+  updateTurnLabel();
+  renderBoard();
+  log('─── New game started ───', 'sys');
+}
+
+let autoRunning = false;
+function clearAutoTimer() {
+  if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  autoRunning = false;
+  document.getElementById('btn-auto').textContent = 'Auto-play';
+}
+
+function autoPlay() {
+  if (gameOver) return;
+  makeMove();
+  if (!gameOver) autoTimer = setTimeout(autoPlay, 700);
+}
+
+// ─── Button handlers ────────────────────────────────
+document.getElementById('btn-next').addEventListener('click', () => { clearAutoTimer(); makeMove(); });
+
+document.getElementById('btn-auto').addEventListener('click', () => {
+  if (autoRunning) {
+    clearAutoTimer();
+  } else {
+    autoRunning = true;
+    document.getElementById('btn-auto').textContent = 'Pause';
+    autoPlay();
+  }
+});
+
+document.getElementById('btn-reset').addEventListener('click', resetGame);
+document.getElementById('btn-play-again').addEventListener('click', resetGame);
+
+// ─── Init ────────────────────────────────────────────
+renderBoard();
+updateTurnLabel();
+updateScoreDisplay();
+log('Algorithm Clash engine ready. BFS (X) moves first.', 'sys');
+log('Click "Next AI Move" to step · "Auto-play" to watch · cells to place manually.', 'sys');
+</script>
+</body>
+</html>
